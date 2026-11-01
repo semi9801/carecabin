@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+keystore.properties
+*.jks
+*.keystore
+.idea/
+# local agent rules (contain local paths) stay out of the public repo
+AGENTS.md
+.claude/
+.codex/
+*.log
