@@ -35,7 +35,7 @@ private const val TAG = "CareCabin.Vehicle"
 /**
  * Vehicle SDK v2.3.2 adapter. Listeners keep [signals] current; commands call the matching set* API.
  * Failures never crash: a failed callback leaves the value "not reported".
- * Window values are passed as percent (0–100) — the unit is checked against capability bounds on the emulator (plan P-list).
+ * Window position is only read (air model input); care never moves a window.
  */
 class PleosVehicleBridge(private val v: Vehicle, private val note: (String) -> Unit) : VehicleBridge {
     @Volatile private var state = VehicleSignals(occupied = setOf(Seat.DRIVER), gear = Gear.UNKNOWN)
@@ -144,7 +144,6 @@ class PleosVehicleBridge(private val v: Vehicle, private val note: (String) -> U
             val set = buildSet {
                 add(Actuator.Recirculation); add(Actuator.FanSpeed)
                 for (s in seats) { add(Actuator.ZoneTemp(s)); add(Actuator.FanFace(s)); add(Actuator.SeatVent(s)) }
-                Seat.entries.forEach { add(Actuator.Window(it)) }
             }
             if (seats.isNotEmpty()) supportedNow = set
             note("capability 온도 존: ${seats.joinToString { it.label }.ifEmpty { "없음(기본 1열 가정)" }}")
@@ -166,7 +165,7 @@ class PleosVehicleBridge(private val v: Vehicle, private val note: (String) -> U
                     hvac.setHvacFanDirection(seatArea(a.seat), dir, { ar, d -> ok(ar, d); put(a, if (d == FanDirectionType.FACE) 1 else 0) }, failed("setFanDirection"))
                 }
                 is Actuator.SeatVent -> v.getSeat().setHvacSeatVentilation(seatArea(a.seat), cmd.value, { ar, i -> ok(ar, i); put(a, i) }, failed("setSeatVentilation"))
-                is Actuator.Window -> v.getWindow().setWindowPosition(windowArea(a.seat), cmd.value, { ar, i -> ok(ar, i); put(a, i) }, failed("setWindowPosition"))
+                is Actuator.Window -> return false // read only since 2026-11-10
                 Actuator.Ambient -> return false // not wired in the MVP (first item in the cut list)
             }
         } catch (e: Exception) {

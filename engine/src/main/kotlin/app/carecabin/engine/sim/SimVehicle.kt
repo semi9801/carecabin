@@ -11,14 +11,13 @@ object Capabilities {
     /** Every actuator, including rear climate zones and ambient light (a fully equipped car). */
     val full: Set<Actuator> = buildSet {
         add(Actuator.Recirculation); add(Actuator.FanSpeed); add(Actuator.Ambient)
-        Seat.entries.forEach { add(Actuator.ZoneTemp(it)); add(Actuator.FanFace(it)); add(Actuator.SeatVent(it)); add(Actuator.Window(it)) }
+        Seat.entries.forEach { add(Actuator.ZoneTemp(it)); add(Actuator.FanFace(it)); add(Actuator.SeatVent(it)) }
     }
 
     /** Like the Pleos Virtual Console: climate and seat comfort on row 1 only, no ambient light. */
     val row1Only: Set<Actuator> = buildSet {
         add(Actuator.Recirculation); add(Actuator.FanSpeed)
         listOf(Seat.DRIVER, Seat.PASSENGER).forEach { add(Actuator.ZoneTemp(it)); add(Actuator.FanFace(it)); add(Actuator.SeatVent(it)) }
-        Seat.entries.forEach { add(Actuator.Window(it)) }
     }
 }
 

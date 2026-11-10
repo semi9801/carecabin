@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import app.carecabin.platform.Platform
 import app.carecabin.platform.PlatformFactory
 import app.carecabin.platform.PrefsPresetStore
@@ -42,6 +45,13 @@ class MainActivity : ComponentActivity() {
         val app = application as CareCabinApp
         val controller = app.controller
         app.uxGate // subscribe once per process
+        // Phone demo only: full screen, so the recording has more room and no personal notification icons.
+        if (resources.configuration.screenHeightDp < 720) {
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
         setContent {
             CareCabinTheme {
                 val state by controller.state.collectAsState()

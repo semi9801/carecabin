@@ -87,7 +87,7 @@ class ScreenRenderTest {
         fun advanceTo(t: Int) { while (c.state.value.running && c.state.value.tSec < t) { scope.advanceTimeBy(100); scope.runCurrent() } }
         advanceTo(390)                       // curve announced ahead of the mountain road
         shot("2_driving_curve_ahead")
-        advanceTo(560)                       // caution on the rear-right seat, window open while dry
+        advanceTo(560)                       // caution on the rear-right seat
         shot("3_driving_seat_care")
         while (c.state.value.running && c.state.value.question == null && c.state.value.tSec < 840) { scope.advanceTimeBy(100); scope.runCurrent() }
         shot("4_driving_rest_question")

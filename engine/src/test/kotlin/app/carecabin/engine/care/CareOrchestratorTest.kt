@@ -36,13 +36,14 @@ class CareOrchestratorTest {
             wiper: Boolean = false,
             voice: List<VoiceIntent> = emptyList(),
             signals: VehicleSignals = car.signals.copy(wiperOn = wiper),
+            arrived: Boolean = false,
         ): CareOutput {
             val out = orch.evaluate(
                 CareInputs(
                     tSec = t, msi = msi, curveAlert = curve, nearestTurnM = if (curve) 1500.0 else null,
                     co2Ppm = co2, secondsTo1000 = if (co2 >= 1000) 0.0 else 9999.0, freshNeededSec = 120.0,
                     speedKmh = speed, moving = speed > 3, signals = signals, preset = preset,
-                    supported = supported, tripDrivingSec = t, voice = voice,
+                    supported = supported, tripDrivingSec = t, voice = voice, arrivedAtWaypoint = arrived,
                 ),
             )
             out.commands.forEach { car.apply(it); sent += it }
@@ -55,28 +56,25 @@ class CareOrchestratorTest {
     @Test fun driverZoneAndSeatAreNeverChanged() {
         val r = Rig()
         repeat(600) { r.tick(mapOf(Seat.DRIVER to 90.0, Seat.REAR_RIGHT to 80.0), preset, co2 = 1600.0) }
-        assertTrue(r.sent.none { it.actuator == Actuator.ZoneTemp(Seat.DRIVER) || it.actuator == Actuator.SeatVent(Seat.DRIVER) || it.actuator == Actuator.Window(Seat.DRIVER) })
+        assertTrue(r.sent.none { it.actuator == Actuator.ZoneTemp(Seat.DRIVER) || it.actuator == Actuator.SeatVent(Seat.DRIVER) })
         assertEquals(220, r.car.signals.actuators[Actuator.ZoneTemp(Seat.DRIVER)])
     }
 
-    @Test fun rainKeepsWindowsClosedButVentilates() {
+    @Test fun rainStillGivesSeatCareWithBreezeAndVentilation() {
         val r = Rig()
         repeat(60) { r.tick(mapOf(Seat.REAR_RIGHT to 60.0), preset, wiper = true) }
-        assertTrue(r.sent.none { it.actuator is Actuator.Window && it.value > 0 })
         assertEquals(2, r.car.signals.actuators[Actuator.SeatVent(Seat.REAR_RIGHT)])
         assertEquals(1, r.car.signals.actuators[Actuator.FanFace(Seat.REAR_RIGHT)])
     }
 
-    @Test fun highSpeedKeepsWindowsClosed() {
-        val r = Rig()
-        repeat(60) { r.tick(mapOf(Seat.REAR_RIGHT to 60.0), preset, speed = 95.0) }
-        assertTrue(r.sent.none { it.actuator is Actuator.Window && it.value > 0 })
-    }
-
-    @Test fun cautionOpensRearWindowSlightlyWhenDryAndSlow() {
-        val r = Rig()
-        repeat(30) { r.tick(mapOf(Seat.REAR_RIGHT to 60.0), preset) }
-        assertEquals(5, r.car.signals.actuators[Actuator.Window(Seat.REAR_RIGHT)])
+    @Test fun windowsAreNeverCommanded() {
+        // Even with every window reported as controllable: dry and slow caution, rest, arrival ventilation, high CO₂.
+        val r = Rig(Capabilities.full + Seat.entries.map { Actuator.Window(it) })
+        repeat(120) { r.tick(mapOf(Seat.REAR_RIGHT to 75.0), preset, co2 = 1600.0, speed = 30.0) }
+        r.tick(mapOf(Seat.REAR_RIGHT to 75.0), preset, speed = 0.0, arrived = true)
+        repeat(200) { r.tick(mapOf(Seat.REAR_RIGHT to 40.0), preset, speed = 0.0) }
+        assertTrue(r.sent.none { it.actuator is Actuator.Window }, "window commands: ${r.sent.filter { it.actuator is Actuator.Window }}")
+        assertTrue(r.sent.any { it.actuator == Actuator.Recirculation && it.value == 0 }, "arrival still ventilates with outside air")
     }
 
     @Test fun airAndSicknessShareOneOutsideAirCommand() {
@@ -106,7 +104,6 @@ class CareOrchestratorTest {
         assertEquals(230, r.car.signals.actuators[Actuator.ZoneTemp(Seat.REAR_RIGHT)])
         assertEquals(1, r.car.signals.actuators[Actuator.Recirculation])
         assertEquals(3, r.car.signals.actuators[Actuator.FanSpeed])
-        assertEquals(0, r.car.signals.actuators[Actuator.Window(Seat.REAR_RIGHT)])
         val before = r.sent.size
         repeat(590) { r.tick(mapOf(Seat.REAR_RIGHT to 60.0), preset, co2 = 1200.0) }
         assertEquals(before, r.sent.size, "no climate commands while paused")
@@ -129,11 +126,11 @@ class CareOrchestratorTest {
         assertEquals(1, r.car.signals.actuators[Actuator.Recirculation])
     }
 
-    @Test fun permissionsOffMeansNoWindowAndNoSeat() {
+    @Test fun seatPermissionOffMeansNoSeatVentilation() {
         val r = Rig()
-        val p = preset.copy(permissions = CarePermissions(window = false, seat = false))
+        val p = preset.copy(permissions = CarePermissions(seat = false))
         repeat(60) { r.tick(mapOf(Seat.REAR_RIGHT to 60.0), p) }
-        assertTrue(r.sent.none { it.actuator is Actuator.Window || it.actuator is Actuator.SeatVent })
+        assertTrue(r.sent.none { it.actuator is Actuator.SeatVent })
     }
 
     @Test fun rearZoneFallsBackWhenRow1Only() {

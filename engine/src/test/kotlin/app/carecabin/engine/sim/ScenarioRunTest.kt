@@ -38,15 +38,13 @@ class ScenarioRunTest {
         assertTrue(report.goodAirRatio > 0.8, "good air ratio ${report.goodAirRatio}")
     }
 
-    @Test fun mountainScenarioShowsPredictionSeatCareRainRuleRestStopAndRestore() {
+    @Test fun mountainScenarioShowsPredictionSeatCareRestStopAndRestore() {
         val car = SimVehicle()
         val run = ScenarioRun(Scenarios.mountain, SimBridge(car))
         var curveSpokenAt: Int? = null
         var cautionAt: Int? = null
         var restAskedAt: Int? = null
         var waypointAt: Int? = null
-        var windowOpenedDry = false
-        var windowAfterRain = -1
         var arrivalVent = false
         var restoredAt: Int? = null
         while (true) {
@@ -54,19 +52,16 @@ class ScenarioRunTest {
             val ui = r.out.care.ui
             if (curveSpokenAt == null && r.out.care.speech.any { it.kind == SpeechKind.CURVE }) curveSpokenAt = r.tSec
             if (cautionAt == null && ui.seatStages[Seat.REAR_RIGHT]?.let { it >= SickStage.CAUTION } == true) cautionAt = r.tSec
-            if ((car.signals.actuators[Actuator.Window(Seat.REAR_RIGHT)] ?: 0) in 1..6 && r.tSec < 600) windowOpenedDry = true
-            if (r.tSec == 700) windowAfterRain = car.signals.actuators[Actuator.Window(Seat.REAR_RIGHT)] ?: -1
             if (restAskedAt == null && ui.question == Question.REST) { restAskedAt = r.tSec; run.say(IntentParser.parse("응, 쉬어가자")!!) }
             if (waypointAt == null && r.out.care.waypoint != null) waypointAt = r.tSec
-            if (r.tSec in 901..1000 && (car.signals.actuators[Actuator.Window(Seat.PASSENGER)] ?: 0) >= 30) arrivalVent = true
+            if (r.tSec in 901..1000 && car.signals.actuators[Actuator.Recirculation] == 0 && car.signals.actuators[Actuator.FanSpeed] == 8) arrivalVent = true
+            assertTrue(r.applied.none { it.first.actuator is Actuator.Window }, "no window command at ${r.tSec}")
             if (r.tSec == 1150) run.say(VoiceIntent.RESTORE)
             if (r.tSec == 1152) restoredAt = r.tSec.takeIf { car.signals.actuators[Actuator.Recirculation] == 1 && car.signals.actuators[Actuator.FanSpeed] == 3 }
             if (r.finished) break
         }
         assertNotNull(curveSpokenAt); assertTrue(curveSpokenAt!! < 420, "curve announced before the winding road: $curveSpokenAt")
         assertNotNull(cautionAt); assertTrue(cautionAt!! in 420..700, "caution at $cautionAt")
-        assertTrue(windowOpenedDry, "rear window opened a little while dry")
-        assertEquals(0, windowAfterRain, "rain closes the window")
         assertNotNull(restAskedAt); assertNotNull(waypointAt)
         assertTrue(arrivalVent, "arrival ventilation at the rest stop")
         assertNotNull(restoredAt, "restore by voice")

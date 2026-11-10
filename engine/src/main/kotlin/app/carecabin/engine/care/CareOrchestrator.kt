@@ -43,10 +43,6 @@ data class CareConstants(
     val restDeclineCooldownSec: Double = 1200.0,
     val questionTimeoutSec: Double = 300.0,
     val arrivalVentSec: Double = 180.0,
-    val movingWindowMaxPct: Int = 6,
-    val highSpeedKmh: Double = 80.0,
-    val cautionWindowPct: Int = 5,
-    val arrivalWindowPct: Int = 30,
     val tempStepTenths: Int = 10,
 )
 
@@ -120,7 +116,6 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
     private var brakeTipDone = false
     private var arrivalVentUntil = Double.NEGATIVE_INFINITY
     private var forcedRestSeat: Seat? = null
-    private var rainRuleLogged = false
 
     var autoCareCount = 0; private set
     var restoreCount = 0; private set
@@ -240,7 +235,6 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
         fun sup(a: Actuator) = a in i.supported
         val arrivalVent = t < arrivalVentUntil
         if (arrivalVent) {
-            for (s in i.signals.occupied) if (sup(Actuator.Window(s))) intents += Intent(Actuator.Window(s), c.arrivalWindowPct, 1, "도착 환기")
             if (sup(Actuator.Recirculation)) intents += Intent(Actuator.Recirculation, 0, 1, "도착 환기")
             if (sup(Actuator.FanSpeed)) intents += Intent(Actuator.FanSpeed, 8, 1, "도착 환기")
         }
@@ -262,7 +256,6 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
             if (sup(Actuator.Ambient)) intents += Intent(Actuator.Ambient, 1, 4, why)
             if (targetStage >= SickStage.CAUTION) {
                 if (sup(Actuator.SeatVent(s))) intents += Intent(Actuator.SeatVent(s), 2, 2, why)
-                if (sup(Actuator.Window(s))) intents += Intent(Actuator.Window(s), c.cautionWindowPct, 2, why)
                 if (!brakeTipDone && i.preset.permissions.brakeTip && i.moving) {
                     brakeTipDone = true
                     say(SpeechKind.BRAKE_TIP, "동승자를 위해 조금만 부드럽게 제동해 주세요.")
@@ -276,16 +269,12 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
         }
 
         // ---- hard rules, permissions, arbitration ----
-        val rainBlocked = i.moving && i.signals.wiperOn && intents.any { it.actuator is Actuator.Window }
-        if (rainBlocked && !rainRuleLogged) log += "우천 규칙: 창문 대신 바람"
-        rainRuleLogged = rainBlocked
         val kept = intents.filter { allowed(it, i, paused) }
         val desired = kept.groupBy { it.actuator }.mapValues { (a, list) ->
             val best = list.minOf { it.priority }
             val top = list.filter { it.priority == best }
             val value = when (a) {
                 Actuator.FanSpeed -> top.maxOf { it.value }
-                is Actuator.Window -> top.minOf { it.value }
                 else -> top.first().value
             }
             Intent(a, clamp(a, value), best, top.first().reason)
@@ -378,22 +367,18 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
         val p = i.preset.permissions
         // Paused after "원래대로": only the air-safety stage (entered at CO₂ ≥ 1,500, drowsiness risk; held until < 1,000) may act.
         if (paused && !(it.priority == 3 && breath2Since != null)) return false
-        // Hard rules: never touch the driver's own zone or seat; never the driver's window.
+        // Hard rules: never touch the driver's own zone or seat.
         when (a) {
             is Actuator.ZoneTemp -> if (a.seat.isDriver) return false
             is Actuator.SeatVent -> if (a.seat.isDriver) return false
             is Actuator.FanFace -> if (a.seat.isDriver) return false
-            is Actuator.Window -> if (a.seat.isDriver && i.moving) return false
             else -> Unit
-        }
-        if (a is Actuator.Window && i.moving) {
-            if (i.signals.wiperOn) return false
-            if (i.speedKmh >= c.highSpeedKmh) return false
         }
         return when (a) {
             Actuator.Recirculation, Actuator.FanSpeed, is Actuator.ZoneTemp, is Actuator.FanFace -> p.climate
             is Actuator.SeatVent -> p.seat
-            is Actuator.Window -> p.window
+            // Windows are read only (2026-11-10): the user's own opening feeds the air model, care never moves them.
+            is Actuator.Window -> false
             Actuator.Ambient -> p.ambient
         }
     }
@@ -402,7 +387,6 @@ class CareOrchestrator(private val c: CareConstants = CareConstants()) {
         Actuator.FanSpeed -> v.coerceIn(1, 8)
         is Actuator.ZoneTemp -> v.coerceIn(160, 300)
         is Actuator.SeatVent -> v.coerceIn(0, 3)
-        is Actuator.Window -> v.coerceIn(0, 100)
         else -> v
     }
 

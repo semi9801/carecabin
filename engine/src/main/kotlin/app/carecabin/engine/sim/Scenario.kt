@@ -133,11 +133,11 @@ object Scenarios {
 
     private val rest = RestArea("시연용 휴게소(가상)", 38.1050, 128.2150)
 
-    /** B. Passengers on a mountain road: prediction, seat care, rain rule, rest stop, restore. */
+    /** B. Passengers on a mountain road: prediction, seat care in the rain, rest stop, restore. */
     val mountain = Scenario(
         id = "B",
         title = "B. 동승자 산길",
-        summary = "4명 탑승 · 뒷좌석 오른쪽 '멀미 민감'. 커브 예고 → 좌석별 케어 → 비 오면 창문 대신 바람 → 쉬어가기.",
+        summary = "4명 탑승 · 뒷좌석 오른쪽 '멀미 민감'. 커브 예고 → 좌석별 케어(바람·통풍) → 쉬어가기.",
         preset = Preset(
             occupants = mapOf(
                 Seat.DRIVER to Occupant(Seat.DRIVER),
@@ -161,7 +161,7 @@ object Scenarios {
             Cue.Note(0, "VC: 4좌석 탑승 · 내기순환 · 풍량 3 · Gear D"),
             Cue.SetOccupancy(0, Seat.entries.toSet()),
             Cue.SetGear(0, Gear.DRIVE),
-            Cue.Note(560, "VC: 와이퍼 ON (우천 규칙 시연)"),
+            Cue.Note(560, "VC: 와이퍼 ON (비)"),
             Cue.SetWiper(600, true),
             Cue.Note(890, "VC: Gear P (휴게소)"),
             Cue.SetGear(900, Gear.PARK),

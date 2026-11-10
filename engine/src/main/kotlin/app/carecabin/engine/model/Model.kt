@@ -27,7 +27,6 @@ enum class CarClass(val label: String, val volumeM3: Double) {
 data class CarePermissions(
     val climate: Boolean = true,
     val seat: Boolean = true,
-    val window: Boolean = true,
     val ambient: Boolean = true,
     val brakeTip: Boolean = true,
 )
@@ -44,6 +43,7 @@ enum class Gear { PARK, DRIVE, REVERSE, NEUTRAL, UNKNOWN }
  * Everything the app can change. Values are plain Ints so snapshots and comparisons stay simple:
  * Recirculation 1 = 내기 / 0 = 외기, FanSpeed level, ZoneTemp tenths of °C, FanFace 1 = face vent / 0 = other,
  * SeatVent level, Window open percent, Ambient 1 = calm colour.
+ * Window is read only: the user's own opening feeds the air model, care never commands it.
  */
 sealed interface Actuator {
     val label: String

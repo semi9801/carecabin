@@ -44,7 +44,7 @@ fun ReportScreen(s: UiState, c: CareController) {
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             Metric("멀미 위험 구간", "${r.sickZoneCount}곳", "멀미지수 50 이상", Modifier.weight(1f))
             Metric("공기 '좋음' 유지율", "${(r.goodAirRatio * 100).roundToInt()}%", "추정 CO₂ 1,000ppm 미만", Modifier.weight(1f))
-            Metric("자동 케어", "${r.autoCareCount}회", "공조·시트·창문 조정", Modifier.weight(1f))
+            Metric("자동 케어", "${r.autoCareCount}회", "공조·시트 조정", Modifier.weight(1f))
             Metric("원래대로 요청", "${r.restoreCount}회", "말 한마디로 복원", Modifier.weight(1f))
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(18.dp)) {

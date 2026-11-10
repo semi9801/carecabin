@@ -49,11 +49,13 @@ class PrefsPresetStore(context: Context) : PresetStore {
                 val (seat, sens, alias) = (item.split('|') + listOf("", "", "")).take(3)
                 Seat.valueOf(seat) to Occupant(Seat.valueOf(seat), alias, Sensitivity.valueOf(sens))
             }
-            val perms = prefs.getString("permissions", "11111").orEmpty().padEnd(5, '1').map { it == '1' }
+            // "permissions" (5 flags) held a window flag at index 2 until 2026-11-10; "permissions2" drops it.
+            val perms = prefs.getString("permissions2", null)?.padEnd(4, '1')?.map { it == '1' }
+                ?: prefs.getString("permissions", "11111").orEmpty().padEnd(5, '1').map { it == '1' }.filterIndexed { k, _ -> k != 2 }
             val preset = Preset(
                 occupants = occupants.ifEmpty { mapOf(Seat.DRIVER to Occupant(Seat.DRIVER)) },
                 carClass = CarClass.valueOf(prefs.getString("carClass", CarClass.SEDAN.name)!!),
-                permissions = CarePermissions(perms[0], perms[1], perms[2], perms[3], perms[4]),
+                permissions = CarePermissions(perms[0], perms[1], perms[2], perms[3]),
             )
             Triple(preset, prefs.getString("scenario", "B")!!, prefs.getInt("speed", 10))
         }.getOrNull()
@@ -62,9 +64,9 @@ class PrefsPresetStore(context: Context) : PresetStore {
     override fun save(preset: Preset, scenarioId: String, speed: Int) {
         val occ = preset.occupants.values.joinToString(";") { "${it.seat.name}|${it.sensitivity.name}|${it.alias.replace("|", " ").replace(";", " ")}" }
         val p = preset.permissions
-        val perms = listOf(p.climate, p.seat, p.window, p.ambient, p.brakeTip).joinToString("") { if (it) "1" else "0" }
+        val perms = listOf(p.climate, p.seat, p.ambient, p.brakeTip).joinToString("") { if (it) "1" else "0" }
         prefs.edit()
-            .putString("occupants", occ).putString("carClass", preset.carClass.name).putString("permissions", perms)
+            .putString("occupants", occ).putString("carClass", preset.carClass.name).putString("permissions2", perms)
             .putString("scenario", scenarioId).putInt("speed", speed)
             .apply()
     }

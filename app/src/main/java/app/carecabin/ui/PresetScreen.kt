@@ -80,7 +80,6 @@ fun PresetScreen(s: UiState, c: CareController) {
                     val p = s.preset.permissions
                     PermRow("공조·외기 사이클과 좌석별 온도", "운전석 온도는 바꾸지 않아요", p.climate) { v -> c.setPermissions { it.copy(climate = v) } }
                     PermRow("시트 통풍·열선", null, p.seat) { v -> c.setPermissions { it.copy(seat = v) } }
-                    PermRow("창문 2~3cm", "비·고속에서는 자동으로 닫아요", p.window) { v -> c.setPermissions { it.copy(window = v) } }
                     PermRow("차분한 단색 조명", null, p.ambient) { v -> c.setPermissions { it.copy(ambient = v) } }
                     PermRow("부드러운 제동 안내", "트립당 1번", p.brakeTip) { v -> c.setPermissions { it.copy(brakeTip = v) } }
                 }
