@@ -41,13 +41,14 @@ import app.carecabin.engine.model.VoiceIntent
 import kotlin.math.roundToInt
 
 /**
- * Screen 2 — while driving: three cards and two buttons (원래대로 / 말로 하기).
+ * Full dashboard — three cards and two buttons (원래대로 / 말로 하기). Shown only when the user asks for it
+ * (split or second screen); the default while driving is the side toolbar in CompanionScreen.kt.
  * No settings, profiles or long text while driving (Korean driving-restriction policy).
  * State is never colour-only: every coloured dot or number also carries a stage word.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DrivingScreen(s: UiState, c: CareController) {
+internal fun DashboardScreen(s: UiState, c: CareController, canShrink: Boolean) {
     var keywords by remember { mutableStateOf(false) }
     val stopped = s.speedKmh < 1.0
     Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -57,6 +58,7 @@ fun DrivingScreen(s: UiState, c: CareController) {
             Text(if (s.paused) "자동 케어 쉬는 중 (10분)" else "주행 중 자동 케어", color = if (s.paused) Palette.fair else Palette.good, fontSize = 20.sp)
             Spacer(Modifier.weight(1f))
             s.cueNote?.let { Chip("시연 안내 · $it", Palette.sub) }
+            if (canShrink) { Spacer(Modifier.padding(6.dp)); BigButton("내비와 함께 보기", primary = false) { c.setDashboard(false) } }
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             SicknessCard(s, Modifier.weight(1f).fillMaxHeight())
@@ -252,4 +254,4 @@ private fun shortSeat(s: Seat) = when (s) { Seat.DRIVER -> "운전석"; Seat.PAS
 
 private fun gearLabel(g: String) = when (g) { "PARK" -> "P"; "DRIVE" -> "D"; "REVERSE" -> "R"; "NEUTRAL" -> "N"; else -> "-" }
 
-private fun fmt(sec: Int) = "%d:%02d".format(sec / 60, sec % 60)
+internal fun fmt(sec: Int) = "%d:%02d".format(sec / 60, sec % 60)

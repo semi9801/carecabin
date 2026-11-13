@@ -45,6 +45,11 @@ enum class CapabilityProfile(val label: String, val set: Set<Actuator>) {
 
 data class LogLine(val tSec: Int, val text: String)
 
+enum class NoticeKind { CARE, AIR, SICK }
+
+/** One short message for the side toolbar. [id] lets the auto-close timer skip a notice that was already replaced. */
+data class Notice(val kind: NoticeKind, val title: String, val id: Int)
+
 data class UiState(
     val screen: Screen = Screen.PRESET,
     val preset: Preset = Scenarios.mountain.preset,
@@ -86,7 +91,15 @@ data class UiState(
     val msiHistory: List<Float> = emptyList(),
     /** CarUxRestrictions says distraction optimisation is required (automotive only). */
     val uxRestricted: Boolean = false,
+    /** Side toolbar: the latest care notice (closes itself), or opened by hand from the edge tab. */
+    val notice: Notice? = null,
+    val toolbarOpen: Boolean = false,
+    /** Full three-card dashboard instead of the toolbar (for a split or second screen). */
+    val dashboard: Boolean = false,
 ) {
+    /** The toolbar stays out of the way unless there is something to say, a question to answer, or the user opened it. */
+    val toolbarVisible: Boolean get() = toolbarOpen || notice != null || question != null
+
     /** Subtitles fade after 20 simulated seconds so stale prompts do not linger. */
     val recentSpeech: String? get() = lastSpeech?.takeIf { tSec - lastSpeechAt <= 20 }
 }
@@ -116,6 +129,8 @@ class CareController(
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var job: Job? = null
+    private var noticeJob: Job? = null
+    private var noticeSeq = 0
     private var run: ScenarioRun? = null
 
     init {
@@ -149,6 +164,39 @@ class CareController(
     fun setProfile(p: CapabilityProfile) = _state.update { it.copy(profile = p) }
     fun open(screen: Screen) = _state.update { it.copy(screen = screen) }
 
+    // ---- side toolbar ----
+    fun openToolbar() = _state.update { it.copy(toolbarOpen = true) }
+    fun closeToolbar() { noticeJob?.cancel(); _state.update { it.copy(toolbarOpen = false, notice = null) } }
+    fun setDashboard(on: Boolean) = _state.update { it.copy(dashboard = on) }
+
+    private fun postNotice(kind: NoticeKind, title: String) {
+        val n = Notice(kind, title, ++noticeSeq)
+        _state.update { it.copy(notice = n) }
+        noticeJob?.cancel()
+        noticeJob = scope.launch {
+            delay(NOTICE_MS)
+            _state.update { if (it.notice?.id == n.id) it.copy(notice = null) else it }
+        }
+    }
+
+    /** Decides whether this tick is worth interrupting the navigation view for. */
+    private fun noticeFor(prev: UiState, stage: SickStage, airStage: AirStage, care: List<String>, paused: Boolean, curve: Boolean, turnM: Double?) {
+        val sickHeld = prev.notice?.kind == NoticeKind.SICK && stage >= SickStage.CAUTION
+        when {
+            stage >= SickStage.CAUTION && prev.stage < SickStage.CAUTION -> postNotice(NoticeKind.SICK, "멀미지수가 높아요")
+            sickHeld -> Unit
+            airStage != AirStage.OBSERVE && prev.airStage == AirStage.OBSERVE -> postNotice(NoticeKind.AIR, "바깥 공기를 넣고 있어요")
+            !paused && care.any { it !in prev.activeCare } -> postNotice(
+                NoticeKind.CARE,
+                when {
+                    curve && turnM != null && turnM < 300 -> "커브 구간을 케어하고 있어요"
+                    curve -> "커브 구간에 대비했어요"
+                    else -> "공간 케어를 했어요"
+                },
+            )
+        }
+    }
+
     private fun updatePreset(f: (Preset) -> Preset) {
         if (_state.value.uxRestricted) return
         _state.update { if (it.running) it else it.copy(preset = f(it.preset)) }
@@ -174,7 +222,7 @@ class CareController(
         }
         val r = ScenarioRun(scenario, bridge, s.preset)
         run = r
-        _state.update { it.copy(running = true, tSec = 0, durationSec = scenario.durationSec, logs = emptyList(), report = null, restAdded = null, lastSpeech = null, cueNote = null, co2History = emptyList(), msiHistory = emptyList(), screen = Screen.DRIVING) }
+        _state.update { it.copy(running = true, tSec = 0, durationSec = scenario.durationSec, logs = emptyList(), report = null, restAdded = null, lastSpeech = null, cueNote = null, co2History = emptyList(), msiHistory = emptyList(), screen = Screen.DRIVING, notice = null, toolbarOpen = false) }
         log("출발: ${scenario.title} · 차량 신호 ${if (bridge is PresetSimBridge) "시뮬레이터" else "Pleos"} · 위치·내비 시나리오 재생")
         job = scope.launch {
             while (isActive) {
@@ -194,6 +242,7 @@ class CareController(
                 out.care.waypoint?.let { area -> platform.navi?.addWaypoint(area); log("내비: 경유지 추가 요청 ${area.name}${if (platform.navi == null) " (시나리오)" else ""}", res.tSec) }
                 val sig = bridge.signals()
                 val ui = out.care.ui
+                noticeFor(_state.value, ui.stage, ui.airStage, ui.activeCare, ui.paused, out.motion.curveAlert, out.motion.nearestTurnM)
                 _state.update { st ->
                     st.copy(
                         tSec = res.tSec, gear = sig.gear, wiperOn = sig.wiperOn, occupied = sig.occupied,
@@ -222,7 +271,8 @@ class CareController(
 
     private fun finish() {
         val rep = run?.session?.report()
-        _state.update { it.copy(running = false, report = rep, screen = if (rep != null) Screen.REPORT else Screen.PRESET, cueNote = null) }
+        noticeJob?.cancel()
+        _state.update { it.copy(notice = null, toolbarOpen = false, running = false, report = rep, screen = if (rep != null) Screen.REPORT else Screen.PRESET, cueNote = null) }
         log("트립 종료")
     }
 
@@ -249,6 +299,9 @@ class CareController(
     private fun log(text: String, t: Int = _state.value.tSec) = _state.update { it.copy(logs = (it.logs + LogLine(t, text)).takeLast(80)) }
 
     companion object {
+        /** A care notice closes itself after 8 seconds (wall clock, independent of the demo playback speed). */
+        const val NOTICE_MS = 8_000L
+
         fun fmtValue(a: Actuator, v: Int): String = when (a) {
             Actuator.Recirculation -> if (v == 1) "내기" else "외기"
             Actuator.FanSpeed -> "${v}단"

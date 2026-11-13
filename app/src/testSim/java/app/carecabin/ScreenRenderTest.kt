@@ -85,13 +85,29 @@ class ScreenRenderTest {
 
         c.start()
         fun advanceTo(t: Int) { while (c.state.value.running && c.state.value.tSec < t) { scope.advanceTimeBy(100); scope.runCurrent() } }
-        advanceTo(390)                       // curve announced ahead of the mountain road
-        shot("2_driving_curve_ahead")
-        advanceTo(560)                       // caution on the rear-right seat
-        shot("3_driving_seat_care")
-        while (c.state.value.running && c.state.value.question == null && c.state.value.tSec < 840) { scope.advanceTimeBy(100); scope.runCurrent() }
-        shot("4_driving_rest_question")
+        fun advanceUntil(limit: Int, done: () -> Boolean) { while (c.state.value.running && !done() && c.state.value.tSec < limit) { scope.advanceTimeBy(100); scope.runCurrent() } }
+        advanceTo(5)
+        println("notice at departure: ${c.state.value.notice} care=${c.state.value.activeCare}")
+        advanceUntil(300) { !c.state.value.toolbarVisible }   // any departure notice has closed itself
+        shot("2a_driving_idle_edge_tab")     // nothing to say: navigation keeps the screen
+        assertTrue("toolbar hidden while idle", !c.state.value.toolbarVisible)
+        advanceUntil(560) { c.state.value.notice?.kind == NoticeKind.CARE }
+        shot("2b_toolbar_care_notice")
+        assertEquals("care notice shown", NoticeKind.CARE, c.state.value.notice?.kind)
+        val careAt = c.state.value.notice!!.id
+        scope.advanceTimeBy(CareController.NOTICE_MS + 100); scope.runCurrent()
+        assertTrue("care notice closes itself", c.state.value.notice?.id != careAt)
+        advanceUntil(840) { c.state.value.notice?.kind == NoticeKind.SICK }
+        shot("3_toolbar_sickness_high")
+        assertEquals("sickness notice shown", NoticeKind.SICK, c.state.value.notice?.kind)
+        advanceUntil(840) { c.state.value.question != null }
+        shot("4_toolbar_rest_question")
         assertTrue("rest question asked", c.state.value.question != null)
+        assertTrue("toolbar stays open for the question", c.state.value.toolbarVisible)
+        c.setDashboard(true)
+        shot("4b_dashboard")
+        c.setDashboard(false)
+        c.closeToolbar(); c.openToolbar()
         c.voice(app.carecabin.engine.model.VoiceIntent.YES)
         advanceTo(720)
         shot("5_driving_rain_rule")
